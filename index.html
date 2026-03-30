@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduAsistencia - Registro Escolar</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --bg-light: #f3f4f6;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            color: #1f2937;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        /* Pantalla de Registro Alumno */
+        .student-hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            padding: 20px;
+        }
+
+        .registration-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* Panel Profesor */
+        .admin-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            padding: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            padding: 2rem;
+            background: #f9fafb;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            color: #4b5563;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background: #eef2ff;
+            color: var(--primary-color);
+        }
+
+        .status-badge {
+            padding: 0.35rem 0.75rem;
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-presente { background: #dcfce7; color: #166534; }
+        .status-tarde { background: #fef9c3; color: #854d0e; }
+
+        .hidden { display: none !important; }
+
+        /* Botón flotante para profesor */
+        .admin-access-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+
+        .admin-access-btn:hover { opacity: 1; }
+
+        .alert-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            min-width: 300px;
+        }
+
+        /* Indicador de carga */
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 1.5rem;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast-container" class="alert-toast"></div>
+
+    <!-- PANTALLA PRINCIPAL: REGISTRO ALUMNO -->
+    <div id="student-screen" class="student-hero">
+        <div class="registration-card position-relative">
+            <div id="loading-indicator" class="loading-overlay hidden">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+
+            <div class="mb-4">
+                <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="bi bi-person-check-fill" style="font-size: 2.5rem;"></i>
+                </div>
+                <h2 class="fw-bold">Registro de Asistencia</h2>
+                <p class="text-muted">Ingresa tu nombre completo para marcar tu entrada.</p>
+            </div>
+
+            <form id="attendance-form">
+                <div class="mb-4">
+                    <input type="text" id="student-fullname" class="form-control form-control-lg text-center" placeholder="Apellido y Nombre" required>
+                    <div id="student-list-hint" class="small text-muted mt-2">Ejemplo: Perez Juan</div>
+                </div>
+                <button type="submit" id="btn-submit-attendance" class="btn btn-primary btn-lg w-100 py-3 fw-bold shadow">
+                    REGISTRAR MI ASISTENCIA
+                </button>
+            </form>
+
+            <div class="mt-4 pt-4 border-top">
+                <p id="clock" class="h4 fw-bold text-primary mb-0">00:00:00</p>
+                <p class="text-muted small mb-0" id="current-date">Cargando fecha...</p>
+            </div>
+        </div>
+
+        <!-- Botón discreto para acceso profesor -->
+        <button onclick="promptAdmin()" class="btn btn-link text-white admin-access-btn">
+            <i class="bi bi-shield-lock"></i> Modo Profesor
+        </button>
+    </div>
+
+    <!-- PANEL DE CONTROL: MODO PROFESOR -->
+    <div id="admin-panel" class="hidden">
+        <div class="admin-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="d-flex align-items-center mb-4 px-2">
+                    <i class="bi bi-mortarboard-fill text-primary fs-3 me-2"></i>
+                    <h5 class="mb-0 fw-bold">Panel Control</h5>
+                </div>
+                <nav>
+                    <a id="nav-dashboard" class="nav-link active" onclick="showSection('dashboard')">
+                        <i class="bi bi-grid-1x2 me-2"></i> Dashboard
+                    </a>
+                    <a id="nav-students" class="nav-link" onclick="showSection('students')">
+                        <i class="bi bi-people me-2"></i> Lista de Alumnos
+                    </a>
+                    <a id="nav-reports" class="nav-link" onclick="showSection('reports')">
+                        <i class="bi bi-journal-check me-2"></i> Reporte Diario
+                    </a>
+                </nav>
+                <div class="mt-auto pt-5">
+                    <button onclick="exitAdmin()" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-box-arrow-left me-2"></i> Salir del Modo Prof.
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Contenido Principal -->
+            <main class="main-content">
+                
+                <!-- SECCIÓN: DASHBOARD -->
+                <section id="section-dashboard">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2 class="fw-bold">Resumen General</h2>
+                        <div class="text-end">
+                            <button onclick="exportToExcel()" class="btn btn-success me-2">
+                                <i class="bi bi-file-earmark-excel me-1"></i> Excel
+                            </button>
+                            <button onclick="exportToPDF()" class="btn btn-danger">
+                                <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-5">
+                        <div class="col-md-4">
+                            <div class="card p-4 border-0 shadow-sm">
+                                <span class="text-muted small fw-bold text-uppercase">Alumnos Registrados</span>
+                                <h2 id="stat-total" class="display-5 fw-bold mt-2">0</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card p-4 border-0 shadow-sm">
+                                <span class="text-muted small fw-bold text-uppercase">Asistencias Hoy</span>
+                                <h2 id="stat-today" class="display-5 fw-bold mt-2 text-primary">0</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card p-4 border-0 shadow-sm">
+                                <span class="text-muted small fw-bold text-uppercase">% Puntualidad</span>
+                                <h2 id="stat-percent" class="display-5 fw-bold mt-2 text-success">0%</h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm p-4">
+                        <h5 class="fw-bold mb-4">Registro Semanal</h5>
+                        <div style="height: 300px;">
+                            <canvas id="adminChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECCIÓN: GESTIÓN ALUMNOS -->
+                <section id="section-students" class="hidden">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2 class="fw-bold">Gestión de Alumnos</h2>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">
+                            <i class="bi bi-plus-lg me-1"></i> Nuevo Alumno
+                        </button>
+                    </div>
+                    <div class="card border-0 shadow-sm">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th class="ps-4" style="width: 60px;">N°</th>
+                                        <th>Apellido y Nombre</th>
+                                        <th>Curso</th>
+                                        <th class="text-end pe-4">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="students-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECCIÓN: REPORTES -->
+                <section id="section-reports" class="hidden">
+                    <h2 class="fw-bold mb-4">Historial de Asistencias</h2>
+                    <div class="card border-0 shadow-sm">
+                        <div class="p-3 border-bottom">
+                            <div class="row g-2">
+                                <div class="col-md-8">
+                                    <input type="text" id="report-search" class="form-control" placeholder="Buscar por nombre..." oninput="renderReportsTable()">
+                                </div>
+                                <div class="col-md-4">
+                                    <select id="report-filter" class="form-select" onchange="renderReportsTable()">
+                                        <option value="">Todos los estados</option>
+                                        <option value="Presente">Presente</option>
+                                        <option value="Tarde">Tarde</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th class="ps-4" style="width: 60px;">N°</th>
+                                        <th>Apellido y Nombre</th>
+                                        <th>Fecha</th>
+                                        <th>Estado</th>
+                                        <th>Hora Entrada</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reports-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- MODAL: AGREGAR ALUMNO -->
+    <div class="modal fade" id="studentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">Añadir Nuevo Alumno</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <form id="add-student-form">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Apellido y Nombre</label>
+                            <input type="text" id="new-stu-name" class="form-control" placeholder="Ej: Perez Juan" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Curso / Grado</label>
+                            <input type="text" id="new-stu-course" class="form-control" placeholder="Ej: 5º A" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">GUARDAR ALUMNO</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        // --- CONFIGURACIÓN DE CONEXIÓN ---
+        const STREAMLIT_APP_URL = "https://asistencia-normal-banda-2.streamlit.app/"; 
+
+        // --- ESTADO INICIAL ---
+        const DEFAULT_STUDENTS = [
+            { id: 1, name: 'Perez Juan', course: '10-A' },
+            { id: 2, name: 'Gomez Maria', course: '10-A' },
+            { id: 3, name: 'Lopez Carlos', course: '11-B' }
+        ];
+
+        let students = JSON.parse(localStorage.getItem('edu_students')) || DEFAULT_STUDENTS;
+        let attendance = JSON.parse(localStorage.getItem('edu_attendance')) || [];
+        let chartInstance = null;
+
+        // --- RELOJ Y FECHA ---
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString();
+            document.getElementById('current-date').innerText = now.toLocaleDateString('es-ES', { 
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- NOTIFICACIONES ---
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} shadow border-0 py-3 px-4 mb-2 fade show`;
+            toast.innerHTML = `<div class="d-flex align-items-center">
+                <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} fs-4 me-3"></i>
+                <span class="fw-bold">${msg}</span>
+            </div>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // --- REGISTRO ALUMNO ---
+        document.getElementById('attendance-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const inputName = document.getElementById('student-fullname').value.trim().toLowerCase();
+            const today = new Date().toISOString().split('T')[0];
+
+            // Validar si el alumno existe
+            const student = students.find(s => s.name.toLowerCase() === inputName);
+            
+            if(!student) {
+                showToast("Alumno no encontrado. Verifica si el nombre es correcto.", "error");
+                return;
+            }
+
+            // Validar si ya registró hoy
+            const alreadyRegistered = attendance.find(a => a.studentId === student.id && a.date === today);
+            if(alreadyRegistered) {
+                showToast("Ya has registrado tu asistencia hoy.", "error");
+                document.getElementById('attendance-form').reset();
+                return;
+            }
+
+            // Determinar estado
+            const now = new Date();
+            const isLate = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 30);
+            const status = isLate ? 'Tarde' : 'Presente';
+
+            const newRecord = {
+                id: Date.now(),
+                studentId: student.id,
+                studentName: student.name,
+                course: student.course,
+                date: today,
+                time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: status
+            };
+
+            // Mostrar carga
+            document.getElementById('loading-indicator').classList.remove('hidden');
+
+            try {
+                // Sincronizar con Streamlit
+                if (STREAMLIT_APP_URL) {
+                    await fetch(STREAMLIT_APP_URL, {
+                        method: 'POST',
+                        mode: 'no-cors', // Dependiendo de la configuración de tu servidor Streamlit
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newRecord)
+                    });
+                }
+
+                // Guardar localmente
+                attendance.push(newRecord);
+                saveData();
+                showToast(`¡Hola ${student.name}! Registro exitoso: ${status}`);
+                document.getElementById('attendance-form').reset();
+            } catch (error) {
+                console.error("Error al sincronizar con Streamlit:", error);
+                // Si falla la red, igual guardamos localmente
+                attendance.push(newRecord);
+                saveData();
+                showToast(`Registrado localmente (Sin conexión al servidor)`, "warning");
+                document.getElementById('attendance-form').reset();
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+            }
+        });
+
+        // --- ACCESO ADMINISTRADOR ---
+        function promptAdmin() {
+            const pass = prompt("Introduce la contraseña de profesor:");
+            if(pass === "1234") {
+                document.getElementById('student-screen').classList.add('hidden');
+                document.getElementById('admin-panel').classList.remove('hidden');
+                initAdminDashboard();
+            } else if(pass !== null) {
+                alert("Contraseña incorrecta.");
+            }
+        }
+
+        function exitAdmin() {
+            document.getElementById('admin-panel').classList.add('hidden');
+            document.getElementById('student-screen').classList.remove('hidden');
+        }
+
+        // --- FUNCIONES ADMINISTRADOR ---
+        function initAdminDashboard() {
+            showSection('dashboard');
+            updateStats();
+            renderStudentsTable();
+            renderReportsTable();
+            initChart();
+        }
+
+        function showSection(id) {
+            document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(`section-${id}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.getElementById(`nav-${id}`).classList.add('active');
+        }
+
+        function updateStats() {
+            const today = new Date().toISOString().split('T')[0];
+            const todayCount = attendance.filter(a => a.date === today).length;
+            const totalStudents = students.length;
+            
+            document.getElementById('stat-total').innerText = totalStudents;
+            document.getElementById('stat-today').innerText = todayCount;
+            
+            if(attendance.length > 0) {
+                const punctuals = attendance.filter(a => a.status === 'Presente').length;
+                const percent = Math.round((punctuals / attendance.length) * 100);
+                document.getElementById('stat-percent').innerText = percent + '%';
+            }
+        }
+
+        function renderStudentsTable() {
+            const tbody = document.getElementById('students-table-body');
+            tbody.innerHTML = '';
+            const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name));
+
+            sortedStudents.forEach((s, index) => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="ps-4 text-muted fw-bold">${index + 1}</td>
+                        <td class="fw-bold text-dark">${s.name}</td>
+                        <td><span class="badge bg-light text-dark border">${s.course}</span></td>
+                        <td class="text-end pe-4">
+                            <button onclick="deleteStudent(${s.id})" class="btn btn-sm btn-outline-danger border-0"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderReportsTable() {
+            const tbody = document.getElementById('reports-table-body');
+            const search = document.getElementById('report-search').value.toLowerCase();
+            const filter = document.getElementById('report-filter').value;
+            tbody.innerHTML = '';
+            
+            const filteredAttendance = attendance.filter(a => {
+                return a.studentName.toLowerCase().includes(search) && (filter === '' || a.status === filter);
+            }).sort((a, b) => b.date.localeCompare(a.date));
+
+            filteredAttendance.forEach((a, index) => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="ps-4 text-muted fw-bold">${index + 1}</td>
+                        <td class="fw-bold">${a.studentName}</td>
+                        <td class="text-muted small">${a.date}</td>
+                        <td><span class="status-badge status-${a.status.toLowerCase()}">${a.status}</span></td>
+                        <td><i class="bi bi-clock me-1"></i>${a.time}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // --- GESTIÓN DATOS ---
+        document.getElementById('add-student-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-stu-name').value.trim();
+            const course = document.getElementById('new-stu-course').value.trim();
+            students.push({ id: Date.now(), name, course });
+            saveData();
+            renderStudentsTable();
+            updateStats();
+            bootstrap.Modal.getInstance(document.getElementById('studentModal')).hide();
+            this.reset();
+            showToast("Alumno añadido correctamente");
+        });
+
+        function deleteStudent(id) {
+            if(confirm("¿Eliminar alumno? Esto también borrará sus asistencias.")) {
+                students = students.filter(s => s.id !== id);
+                attendance = attendance.filter(a => a.studentId !== id);
+                saveData();
+                renderStudentsTable();
+                renderReportsTable();
+                updateStats();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('edu_students', JSON.stringify(students));
+            localStorage.setItem('edu_attendance', JSON.stringify(attendance));
+        }
+
+        function initChart() {
+            if(chartInstance) chartInstance.destroy();
+            const ctx = document.getElementById('adminChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Lun', 'Mar', 'Mie', 'Jue', 'Vie'],
+                    datasets: [{
+                        label: 'Asistencias',
+                        data: [12, 19, 15, 17, 14],
+                        backgroundColor: '#4f46e5'
+                    }]
+                },
+                options: { maintainAspectRatio: false }
+            });
+        }
+
+        function exportToExcel() {
+            const data = attendance.map(a => ({ Fecha: a.date, Alumno: a.studentName, Curso: a.course, Estado: a.status, Hora: a.time }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Asistencias");
+            XLSX.writeFile(wb, "Reporte_Escolar.xlsx");
+        }
+
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const todayDate = new Date().toISOString().split('T')[0];
+
+            doc.setFontSize(18);
+            doc.text("Historial de Asistencia Escolar", 14, 20);
+            doc.setFontSize(11);
+            doc.text(`Fecha del Reporte: ${new Date().toLocaleDateString()}`, 14, 28);
+
+            const rows = attendance.map(a => [a.date, a.studentName, a.course, a.status, a.time]);
+            doc.autoTable({
+                startY: 40,
+                head: [['Fecha', 'Nombre', 'Curso', 'Estado', 'Hora']],
+                body: rows,
+                headStyles: { fillColor: [79, 70, 229] }
+            });
+
+            doc.save(`Reporte_Asistencia_${todayDate}.pdf`);
+        }
+    </script>
+</body>
+</html>
